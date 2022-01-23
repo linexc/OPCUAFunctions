@@ -15,11 +15,13 @@ using System.Net.Http;
 using System.Linq;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Threading.Tasks;
 
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 using OPCUAFunctions.Entities;
+
 
 namespace OPCUAFunctions
 {
@@ -33,7 +35,7 @@ namespace OPCUAFunctions
         private static List<NodeTwinMap> _nodeTwinMapList = null;
 
         [FunctionName("ProcessOPCPublisherEventsToADT")]
-        public void Run([EventGridTrigger] EventGridEvent message, ILogger log)
+        public async Task Run([EventGridTrigger] EventGridEvent message, ILogger log)
         {
             //if (_logMe) log.LogInformation(message.Data.ToString());
 
@@ -179,6 +181,50 @@ namespace OPCUAFunctions
 
                 updateTwinData = null;
             }
+
+            // update relationship
+            string twinIds = message.Subject.ToString();
+            AsyncPageable<IncomingRelationship> rels = client.GetIncomingRelationshipsAsync(twinIds);
+            log.LogInformation($"Reading event from {twinIds}: {message.EventType}: {msg["data"]}");
+            string parentId = null;
+            await foreach (IncomingRelationship ie in rels)
+            {
+                if (ie.RelationshipName == "has_Pump" || ie.RelationshipName == "has_Tank" || ie.RelationshipName == "has_CustomOperatedValve" || ie.RelationshipName == "has_StandardOperatedValve" || ie.RelationshipName == "has" || ie.RelationshipName == "To")
+                {
+                    parentId = ie.SourceId;
+                    break;
+                }
+            }
+            if (parentId == null)
+            {
+                log.LogError($"Unable to find parent for {twinIds}");
+            }
+            else
+            {
+                // INSERT Update the parent
+                // Read properties which values have been changed in each operation
+                var patch = new Azure.JsonPatchDocument();
+
+                foreach (var operation in msg["data"]["patch"])
+                {
+                    string opValue = (string)operation["op"];
+                    if (opValue.Equals("replace"))
+                    {
+                        string propertyPath = ((string)operation["patch"]);
+
+                        if (mappedProperties.Contains(propertyPath))
+                        {
+                            var value = operation["value"].Value<bool>();
+                            patch.AppendReplace<bool>(propertyPath, value);
+                            log.LogInformation($"Updating parent {parentId}: {propertyPath} = {value}");
+                        }
+                    }
+
+                }
+
+                await client.UpdateDigitalTwinAsync(parentId, patch);
+            }
+
 
             client = null;
             credentials = null;

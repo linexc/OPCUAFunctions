@@ -12,6 +12,7 @@ namespace OPCUAFunctions.Entities
         public NodeValue Value { get; set;  }
     }   
     
+    // why this class?
     public class NodeValue
     {
         public string Value { get; set; }
