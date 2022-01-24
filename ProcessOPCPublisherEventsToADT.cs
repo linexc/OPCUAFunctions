@@ -35,7 +35,7 @@ namespace OPCUAFunctions
         private static List<NodeTwinMap> _nodeTwinMapList = null;
 
         [FunctionName("ProcessOPCPublisherEventsToADT")]
-        public async Task Run([EventGridTrigger] EventGridEvent message, ILogger log)
+        public void Run([EventGridTrigger] EventGridEvent message, ILogger log)
         {
             //if (_logMe) log.LogInformation(message.Data.ToString());
 
@@ -86,12 +86,24 @@ namespace OPCUAFunctions
             foreach (Node node in nodes)
             {
                 // get node id
-                string nodeId = this.getValueFromSplit('=', node.NodeId, 1);
-
+                string nodeId = this.getValueFromSplit('=', node.NodeId, 2);
                 // get mapping information by the node
-                NodeTwinMap map = mapping.Where(x => x.NodeId == nodeId).Single<NodeTwinMap>();
+                //log.LogError(nodeId);
 
-                dto.Add(
+                //foreach (var ele in mapping)
+                //{
+                //    log.LogInformation(ele.ToString()+ "  fengefu  " + ele.NodeId);
+                //}
+                NodeTwinMap map = mapping.Where(x => x.NodeId == nodeId).First<NodeTwinMap>();
+                
+                if (map == null)
+                {
+                    log.LogError("map is nothing");
+                }
+                
+                else 
+                {
+                    dto.Add(
                     new TwinDto()
                     {
                         NodeId = nodeId,
@@ -102,6 +114,8 @@ namespace OPCUAFunctions
                         TimeStamp = Convert.ToDateTime(node.Value.SourceTimeStamp)
                     }
                 );
+                }
+                
             }
 
             if (_logLevel >= 300) log.LogInformation($"dto:\r\n{dto.ToString()}");
@@ -181,7 +195,7 @@ namespace OPCUAFunctions
 
                 updateTwinData = null;
             }
-
+            /*
             // update relationship
             string twinIds = message.Subject.ToString();
             AsyncPageable<IncomingRelationship> rels = client.GetIncomingRelationshipsAsync(twinIds);
@@ -224,7 +238,7 @@ namespace OPCUAFunctions
 
                 await client.UpdateDigitalTwinAsync(parentId, patch);
             }
-
+            */
 
             client = null;
             credentials = null;
